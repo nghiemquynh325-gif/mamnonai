@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Key, Save, Eye, EyeOff, ExternalLink, ShieldCheck, HelpCircle, Cpu, Activity, Zap, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
+import { saveApiKey, getApiKey } from '../services/storageService';
 
 export const Settings: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
@@ -13,16 +14,40 @@ export const Settings: React.FC = () => {
   const [testMessage, setTestMessage] = useState('');
 
   useEffect(() => {
-    const savedKey = localStorage.getItem('MAMNON_AI_API_KEY');
-    const savedModel = localStorage.getItem('MAMNON_AI_MODEL');
+    const loadSettings = async () => {
+      // Load API key from database first
+      const dbKey = await getApiKey();
+      if (dbKey) {
+        setApiKey(dbKey);
+        localStorage.setItem('MAMNON_AI_API_KEY', dbKey); // Cache locally
+      } else {
+        // Fallback to localStorage if database doesn't have it
+        const savedKey = localStorage.getItem('MAMNON_AI_API_KEY');
+        if (savedKey) setApiKey(savedKey);
+      }
 
-    if (savedKey) setApiKey(savedKey);
-    if (savedModel) setModel(savedModel);
+      const savedModel = localStorage.getItem('MAMNON_AI_MODEL');
+      if (savedModel) setModel(savedModel);
+    };
+
+    loadSettings();
   }, []);
 
-  const handleSave = () => {
-    localStorage.setItem('MAMNON_AI_API_KEY', apiKey.trim());
+  const handleSave = async () => {
+    const trimmedKey = apiKey.trim();
+
+    // Save to database
+    try {
+      await saveApiKey(trimmedKey);
+    } catch (error) {
+      console.error('Lỗi khi lưu API key vào database:', error);
+      // Continue to save locally even if database save fails
+    }
+
+    // Save to localStorage as cache
+    localStorage.setItem('MAMNON_AI_API_KEY', trimmedKey);
     localStorage.setItem('MAMNON_AI_MODEL', model);
+
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
     // Reset test status when settings change

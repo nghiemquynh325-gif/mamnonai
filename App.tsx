@@ -9,7 +9,7 @@ import { AuthPage } from './components/AuthPage';
 import { ExperienceInitiative } from './components/ExperienceInitiative';
 import { LessonRequest, SavedLessonPlan, User } from './types';
 import { generateLessonPlan } from './services/geminiService';
-import { savePlan } from './services/storageService';
+import { savePlan, getApiKey } from './services/storageService';
 import { logout } from './services/authService';
 import { supabase } from './services/supabaseClient';
 import { HashRouter } from 'react-router-dom';
@@ -55,6 +55,12 @@ const App: React.FC = () => {
               const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', session.user.id).single();
               if (profile?.full_name) {
                 setUser(prev => prev ? { ...prev, name: profile.full_name } : null);
+              }
+
+              // Load API key from database
+              const apiKey = await getApiKey();
+              if (apiKey) {
+                localStorage.setItem('MAMNON_AI_API_KEY', apiKey);
               }
             } catch (err) {
               console.log("Profile fetch error (using fallback):", err);

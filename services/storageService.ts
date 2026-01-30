@@ -83,3 +83,31 @@ export const deletePlan = async (id: string): Promise<void> => {
     throw new Error("Không thể xóa giáo án này.");
   }
 };
+
+// Lưu API key của user vào database
+export const saveApiKey = async (apiKey: string): Promise<void> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Chưa đăng nhập');
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ api_key: apiKey })
+    .eq('id', user.id);
+
+  if (error) throw error;
+};
+
+// Lấy API key của user từ database
+export const getApiKey = async (): Promise<string | null> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('api_key')
+    .eq('id', user.id)
+    .single();
+
+  if (error) return null;
+  return data?.api_key || null;
+};

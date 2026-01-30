@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { SKKNRequest } from '../types';
 import { generateSKKN } from '../services/geminiService';
+import { savePlan } from '../services/storageService';
 import { Save, Loader2, Copy, FileText, Download } from 'lucide-react';
 import * as docx from 'docx';
 import { saveAs } from 'file-saver';
@@ -47,6 +48,15 @@ export const ExperienceInitiative: React.FC = () => {
         try {
             const content = await generateSKKN(request);
             setResult(content);
+
+            // Auto-save SKKN to database
+            try {
+                await savePlan(request, content);
+                console.log("SKKN đã được lưu tự động");
+            } catch (saveError) {
+                console.error("Lỗi khi lưu SKKN:", saveError);
+                // Don't block user experience if save fails
+            }
         } catch (err: any) {
             setError(err.message || "Có lỗi xảy ra khi tạo sáng kiến.");
         } finally {

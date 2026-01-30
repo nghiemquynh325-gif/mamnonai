@@ -83,6 +83,9 @@ export const getCurrentUser = async (): Promise<User | null> => {
 // Đăng xuất
 export const logout = async () => {
   await supabase.auth.signOut();
+  // Clear local storage to ensure next user doesn't use old key/model
+  localStorage.removeItem('MAMNON_AI_API_KEY');
+  localStorage.removeItem('MAMNON_AI_MODEL');
 };
 
 // Quên mật khẩu
@@ -90,7 +93,7 @@ export const forgotPassword = async (email: string): Promise<string> => {
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: window.location.href, // Quay lại trang hiện tại để reset
   });
-  
+
   if (error) throw new Error(error.message);
   return "Hệ thống đã gửi link khôi phục mật khẩu vào email của cô!";
 };

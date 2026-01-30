@@ -1,11 +1,14 @@
 import { GoogleGenAI } from "@google/genai";
 import { LessonRequest, LessonPurpose, SKKNRequest } from "../types";
 import { SYSTEM_INSTRUCTION } from "../constants";
+import { getApiKey } from "./storageService";
 
 export const generateLessonPlan = async (request: LessonRequest): Promise<string> => {
-  // 1. Try to get key from LocalStorage (User setting)
-  // 2. Fallback to Environment variable (Dev setting)
-  const apiKey = localStorage.getItem('MAMNON_AI_API_KEY') || process.env.API_KEY;
+  // 1. Try to get key from Database (User profile)
+  // 2. Fallback to LocalStorage (User setting cache)
+  // 3. Fallback to Environment variable (Dev setting)
+  const dbKey = await getApiKey();
+  const apiKey = dbKey || localStorage.getItem('MAMNON_AI_API_KEY') || process.env.API_KEY;
 
   if (!apiKey) {
     throw new Error("Chưa có mã kết nối AI. Cô vui lòng vào mục 'Cài đặt' để nhập API Key nhé!");
