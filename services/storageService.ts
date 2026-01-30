@@ -133,14 +133,39 @@ export const getPlans = async (): Promise<SavedLessonPlan[]> => {
 
 // Xóa giáo án
 export const deletePlan = async (id: string): Promise<void> => {
-  const { error } = await supabase
-    .from('lesson_plans')
-    .delete()
-    .eq('id', id);
+  // Get session from localStorage directly to bypass SDK AbortError
+  const sessionData = localStorage.getItem('sb-savcmyugqmwviplclvec-auth-token');
 
-  if (error) {
-    console.error("Lỗi xóa giáo án:", error);
-    throw new Error("Không thể xóa giáo án. Vui lòng thử lại.");
+  if (!sessionData) {
+    throw new Error("Cô cần đăng nhập để xóa giáo án.");
+  }
+
+  let session;
+  try {
+    session = JSON.parse(sessionData);
+  } catch {
+    throw new Error("Session không hợp lệ. Vui lòng đăng nhập lại.");
+  }
+
+  const accessToken = session?.access_token;
+
+  if (!accessToken) {
+    throw new Error("Cô cần đăng nhập để xóa giáo án.");
+  }
+
+  // Use raw fetch to bypass SDK AbortErrors
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/lesson_plans?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: {
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Không thể xóa giáo án: ${response.status} - ${errorText}`);
   }
 };
 
