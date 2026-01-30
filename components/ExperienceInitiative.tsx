@@ -48,18 +48,26 @@ export const ExperienceInitiative: React.FC = () => {
         try {
             const content = await generateSKKN(request);
             setResult(content);
+            setIsLoading(false); // Show result immediately
 
-            // Auto-save SKKN to database
-            try {
-                await savePlan(request, content);
-                console.log("SKKN đã được lưu tự động");
-            } catch (saveError) {
-                console.error("Lỗi khi lưu SKKN:", saveError);
-                // Don't block user experience if save fails
-            }
+            // Auto-save SKKN to database (Background process)
+            (async () => {
+                try {
+                    // Compatible mapping for LessonRequest
+                    // We map 'field' to 'subject' so Dashboard doesn't crash on undefined subject
+                    const compatibleRequest: any = {
+                        ...request,
+                        subject: request.field, // Important for Dashboard filter
+                    };
+                    await savePlan(compatibleRequest, content);
+                    console.log("SKKN đã được lưu tự động");
+                } catch (saveError) {
+                    console.error("Lỗi khi lưu SKKN:", saveError);
+                    alert("Đã tạo nội dung nhưng KHÔNG LƯU ĐƯỢC TỰ ĐỘNG. Cô vui lòng bấm nút LUƯ (hình đĩa mềm) để lưu thủ công nhé!");
+                }
+            })();
         } catch (err: any) {
             setError(err.message || "Có lỗi xảy ra khi tạo sáng kiến.");
-        } finally {
             setIsLoading(false);
         }
     };
@@ -275,6 +283,26 @@ export const ExperienceInitiative: React.FC = () => {
             {result && (
                 <div className="bg-white p-8 rounded-3xl shadow-lg border border-gray-100 animate-fade-in relative">
                     <div className="absolute top-4 right-4 flex space-x-2">
+                        <button
+                            onClick={async () => {
+                                try {
+                                    // Manual save
+                                    const compatibleRequest: any = {
+                                        ...request,
+                                        subject: request.field,
+                                    };
+                                    await savePlan(compatibleRequest, result);
+                                    alert("Đã lưu thành công vào hệ thống! Cô có thể xem lại ở Dashboard.");
+                                } catch (err: any) {
+                                    console.error("Manual save error:", err);
+                                    alert(err.message || "Lỗi khi lưu. Cô vui lòng kiểm tra mạng hoặc đăng nhập lại.");
+                                }
+                            }}
+                            className="p-2 hover:bg-green-50 rounded-full text-green-600"
+                            title="Lưu vào hệ thống"
+                        >
+                            <Save size={20} />
+                        </button>
                         <button
                             onClick={handleCopy}
                             className="p-2 hover:bg-gray-100 rounded-full text-gray-500"

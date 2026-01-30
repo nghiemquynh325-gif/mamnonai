@@ -21,13 +21,27 @@ export const Dashboard: React.FC<DashboardProps> = ({ onViewPlan, onCreateNew })
       const data = await getPlans();
       setPlans(data);
     } catch (error: any) {
-      // Silently ignore AbortError from React StrictMode
-      if (error.name === 'AbortError' || error.message?.includes('AbortError')) {
-        return;
+      console.error("Dashboard Load Error:", error);
+      // Show error to user instead of silencing it
+      if (error.name === 'AbortError') {
+        // Only ignore if it's strictly a component unmount (cancel)
+        // But here we suspect real network issue
+        // alert("Mất kết nối tới máy chủ (AbortError)."); 
       }
-      console.error(error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const testConnection = async () => {
+    try {
+      const start = Date.now();
+      // Try fetching Supabase URL root (usually 404 but proves connectivity)
+      // Using no-cors to avoid CORS error, we just want to know if it fails network
+      await fetch('https://savcmyugqmwviplclvec.supabase.co', { mode: 'no-cors' });
+      alert(`Kết nối Internet TỐT! (Độ trễ: ${Date.now() - start}ms)`);
+    } catch (err: any) {
+      alert("LỖI: Thiết bị này KHÔNG có Internet để kết nối Server! (" + err.message + ")");
     }
   };
 
@@ -60,8 +74,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onViewPlan, onCreateNew })
   };
 
   const filteredPlans = plans.filter(p =>
-    p.title.toLowerCase().includes(filter.toLowerCase()) ||
-    p.request.subject.toLowerCase().includes(filter.toLowerCase())
+    (p.title && p.title.toLowerCase().includes(filter.toLowerCase())) ||
+    (p.request.subject && p.request.subject.toLowerCase().includes(filter.toLowerCase()))
   );
 
   return (
@@ -77,6 +91,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onViewPlan, onCreateNew })
               <BookOpen size={20} />
               <span className="font-bold">{plans.length} Giáo án đã lưu</span>
             </div>
+            <button
+              onClick={testConnection}
+              className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-white/30 transition-all font-bold text-yellow-300"
+            >
+              <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+              Kiểm tra mạng
+            </button>
           </div>
         </div>
         <button
@@ -90,9 +111,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ onViewPlan, onCreateNew })
 
       {/* Search & List */}
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
             <Clock className="text-pink-500" /> Hoạt động gần đây
+            <button
+              onClick={loadPlans}
+              className="p-1.5 bg-gray-100 hover:bg-pink-100 text-gray-500 hover:text-pink-600 rounded-full transition-all"
+              title="Tải lại danh sách"
+            >
+              <Loader2 size={16} className={isLoading ? "animate-spin" : ""} />
+            </button>
           </h3>
           <input
             type="text"

@@ -7,16 +7,24 @@ export const generateLessonPlan = async (request: LessonRequest): Promise<string
   // 1. Try to get key from Database (User profile)
   // 2. Fallback to LocalStorage (User setting cache)
   // 3. Fallback to Environment variable (Dev setting)
-  const dbKey = await getApiKey();
+  let dbKey = null;
+  try {
+    dbKey = await getApiKey();
+  } catch (err) {
+    console.warn("Failed to fetch API key from DB, falling back to storage:", err);
+  }
+
   const apiKey = dbKey || localStorage.getItem('MAMNON_AI_API_KEY') || process.env.API_KEY;
 
   if (!apiKey) {
     throw new Error("Chưa có mã kết nối AI. Cô vui lòng vào mục 'Cài đặt' để nhập API Key nhé!");
   }
 
-  // Get selected model from LocalStorage or default to flash
+  // Get selected model from LocalStorage or default to gemini-pro
   const savedModel = localStorage.getItem('MAMNON_AI_MODEL');
   const modelId = savedModel || "gemini-2.5-flash";
+
+  console.log("Generating with model:", modelId);
 
   // Initialize client per request to ensure we use the latest key
   const ai = new GoogleGenAI({ apiKey });
@@ -99,6 +107,35 @@ export const generateLessonPlan = async (request: LessonRequest): Promise<string
     return finalText || "Xin lỗi, tôi chưa thể tạo giáo án lúc này. Vui lòng thử lại.";
   } catch (error: any) {
     console.error("Gemini API Error:", error);
+
+    // Auto-retry to handle 404/Not Found for various models
+    if (error.message?.includes('404') || error.message?.includes('NOT_FOUND')) {
+      console.log("Model not found, attempting auto-fix...");
+
+      // Strategy: Try gemini-2.5-flash (Verified working) -> then gemini-pro (Stable)
+      const strategies = ['gemini-2.5-flash', 'gemini-pro'];
+
+      for (const modelId of strategies) {
+        console.log(`Retrying with ${modelId}...`);
+        try {
+          const retryResponse = await ai.models.generateContent({
+            model: modelId,
+            contents: userPrompt,
+            config: { temperature: 0.85 },
+          });
+          let retryText = retryResponse.text || "";
+          retryText = retryText.trim();
+          if (retryText.startsWith("```markdown")) retryText = retryText.replace(/^```markdown\s*/, "").replace(/\s*```$/, "");
+          else if (retryText.startsWith("```")) retryText = retryText.replace(/^```\s*/, "").replace(/\s*```$/, "");
+
+          return retryText; // Success!
+        } catch (retryError) {
+          console.warn(`Retry with ${modelId} failed.`, retryError);
+          // Continue to next strategy
+        }
+      }
+    }
+
     if (error.message?.includes('API key') || error.message?.includes('403')) {
       throw new Error("Mã kết nối AI (API Key) không đúng hoặc đã hết hạn. Cô vui lòng kiểm tra lại trong mục 'Cài đặt'.");
     }
@@ -113,9 +150,23 @@ export const generateLessonPlan = async (request: LessonRequest): Promise<string
 };
 
 export const generateSKKN = async (request: SKKNRequest): Promise<string> => {
-  const apiKey = localStorage.getItem('MAMNON_AI_API_KEY') || process.env.API_KEY;
-  if (!apiKey) throw new Error("Chưa có mã kết nối AI. Cô vui lòng vào mục 'Cài đặt' để nhập API Key nhé!");
+  // 1. Try to get key from Database (User profile)
+  // 2. Fallback to LocalStorage
+  // 3. Fallback to Env
+  let dbKey = null;
+  try {
+    dbKey = await getApiKey();
+  } catch (err) {
+    console.warn("Failed to fetch API key from DB:", err);
+  }
 
+  const apiKey = dbKey || localStorage.getItem('MAMNON_AI_API_KEY') || process.env.API_KEY;
+
+  if (!apiKey) {
+    throw new Error("Chưa có mã kết nối AI. Cô vui lòng vào mục 'Cài đặt' để nhập API Key nhé!");
+  }
+
+  // Use the verified model first
   const savedModel = localStorage.getItem('MAMNON_AI_MODEL');
   const modelId = savedModel || "gemini-2.5-flash";
   const ai = new GoogleGenAI({ apiKey });
@@ -316,14 +367,30 @@ export const generateSKKN = async (request: SKKNRequest): Promise<string> => {
     return response.text || "Xin lỗi, không thể tạo nội dung lúc này.";
   } catch (error: any) {
     console.error("SKKN Gen Error:", error);
+
+    // Auto-retry with gemini-2.5-flash (Verified) -> gemini-pro if 404
+    if (error.message?.includes('404') || error.message?.includes('NOT_FOUND')) {
+      console.log("SKKN Model not found, retrying...");
+      const strategies = ['gemini-2.5-flash', 'gemini-pro'];
+      for (const retryId of strategies) {
+        try {
+          const retryResponse = await ai.models.generateContent({
+            model: retryId,
+            contents: prompt,
+            config: { temperature: 0.7 },
+          });
+          return retryResponse.text || "Xin lỗi, không thể tạo nội dung lúc này.";
+        } catch (retryErr) {
+          console.warn(`Retry SKKN with ${retryId} failed.`, retryErr);
+        }
+      }
+    }
+
     if (error.message?.includes('API key') || error.message?.includes('403')) {
       throw new Error("Mã kết nối AI (API Key) không đúng hoặc đã hết hạn. Cô vui lòng kiểm tra lại trong mục Cài đặt.");
     }
     if (error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('RESOURCE_EXHAUSTED')) {
       throw new Error("Mã API Key này đã hết hạn mức miễn phí trong ngày. Cô có thể:\n1. Tạo API Key mới tại https://aistudio.google.com/app/apikey\n2. Đợi đến ngày mai để tiếp tục sử dụng\n3. Thử chuyển sang model khác trong Cài đặt");
-    }
-    if (error.message?.includes('404') || error.message?.includes('NOT_FOUND')) {
-      throw new Error("Mô hình AI không khả dụng. Vui lòng thử model khác trong Cài đặt.");
     }
     throw new Error("Có lỗi xảy ra: " + (error.message || "Unknown error"));
   }

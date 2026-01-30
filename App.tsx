@@ -30,8 +30,16 @@ const App: React.FC = () => {
   useEffect(() => {
     const checkUser = async () => {
       try {
-        // Use cached session first (no network call)
-        const { data: { session }, error: authError } = await supabase.auth.getSession();
+        // Add timeout to prevent 10s hang on slow networks
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Session check timeout')), 3000)
+        );
+
+        const { data: { session }, error: authError } = await Promise.race([
+          sessionPromise,
+          timeoutPromise
+        ]) as any;
 
         if (authError) {
           console.error("Auth session error:", authError);
@@ -49,21 +57,31 @@ const App: React.FC = () => {
           // Mark auth as done immediately
           setIsAuthChecking(false);
 
-          // Fetch profile in background (non-blocking)
+          // Fetch profile and API Key in parallel to speed up login (avoid waterfall)
           (async () => {
             try {
-              const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', session.user.id).single();
+              const profilePromise = supabase
+                .from('profiles')
+                .select('full_name')
+                .eq('id', session.user.id)
+                .single();
+
+              // Pass userId to skip redundant auth check in getApiKey
+              const apiKeyPromise = getApiKey(session.user.id);
+
+              const [profileResponse, apiKey] = await Promise.all([profilePromise, apiKeyPromise]);
+              const { data: profile } = profileResponse;
+
               if (profile?.full_name) {
                 setUser(prev => prev ? { ...prev, name: profile.full_name } : null);
               }
 
               // Load API key from database
-              const apiKey = await getApiKey();
               if (apiKey) {
                 localStorage.setItem('MAMNON_AI_API_KEY', apiKey);
               }
             } catch (err) {
-              console.log("Profile fetch error (using fallback):", err);
+              console.log("Profile/Key fetch error (using fallback):", err);
             }
           })();
         } else {
@@ -120,10 +138,18 @@ const App: React.FC = () => {
 
   const handleLogout = async () => {
     if (window.confirm("Cô có chắc muốn đăng xuất không ạ?")) {
-      await logout();
-      setUser(null);
-      setLessonPlan(null);
-      setCurrentRequest(null);
+      try {
+        await logout();
+      } catch (err) {
+        console.warn("Logout error (network?), forcing local cleanup:", err);
+      } finally {
+        // Always clear local state
+        setUser(null);
+        setLessonPlan(null);
+        setCurrentRequest(null);
+        localStorage.removeItem('MAMNON_AI_API_KEY'); // Ensure key is gone
+        window.location.reload(); // Hard refresh to clear any stuck Supabase state
+      }
     }
   };
 
@@ -139,23 +165,26 @@ const App: React.FC = () => {
     try {
       const result = await generateLessonPlan(data);
       setLessonPlan(result);
+      setIsLoading(false); // Immediate UI update
 
-      // Auto save after generation (Async)
-      try {
-        await savePlan(data, result);
-        // Trigger Dashboard refresh
-        setRefreshKey(prev => prev + 1);
-      } catch (saveError) {
-        console.error("Lỗi tự động lưu:", saveError);
-        // Không block trải nghiệm nếu lưu lỗi, chỉ log
-      }
+      // Auto save after generation (Background process)
+      (async () => {
+        try {
+          await savePlan(data, result);
+          // Trigger Dashboard refresh
+          setRefreshKey(prev => prev + 1);
+          console.log("Giáo án đã được lưu tự động");
+        } catch (saveError) {
+          console.error("Lỗi tự động lưu:", saveError);
+          alert("Giáo án đã được tạo nhưng LƯU TỰ ĐỘNG THẤT BẠI. Cô vui lòng bấm nút lưu thủ công nhé!");
+        }
+      })();
 
     } catch (err: any) {
       setError(err.message || "Có lỗi xảy ra, vui lòng thử lại.");
       if (err.message && err.message.includes('Cài đặt')) {
         setCurrentPage('settings');
       }
-    } finally {
       setIsLoading(false);
     }
   };

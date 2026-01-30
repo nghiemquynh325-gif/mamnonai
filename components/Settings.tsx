@@ -40,8 +40,9 @@ export const Settings: React.FC = () => {
     try {
       await saveApiKey(trimmedKey);
     } catch (error) {
-      console.error('Lỗi khi lưu API key vào database:', error);
-      // Continue to save locally even if database save fails
+      // Silently ignore DB errors (like missing api_key column)
+      // so user can still save to localStorage
+      console.warn('Could not save to DB, using localStorage only');
     }
 
     // Save to localStorage as cache
@@ -67,10 +68,9 @@ export const Settings: React.FC = () => {
 
     try {
       const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
-      // Use the latest stable model for testing
-      const testModel = 'gemini-2.5-flash';
+      // Use the user-selected model for testing
       const response = await ai.models.generateContent({
-        model: testModel,
+        model: model,
         contents: 'Hello, confirm connection.',
       });
 
@@ -169,23 +169,23 @@ export const Settings: React.FC = () => {
             <ModelOption
               id="gemini-2.5-flash"
               name="Gemini 2.5 Flash"
-              desc="Khuyên dùng (Mới nhất, nhanh nhất)"
+              desc="Tốc độ cực nhanh & Mới nhất (Đã kiểm duyệt)"
               current={model}
               onSelect={setModel}
               icon={<Zap size={18} />}
             />
             <ModelOption
-              id="gemini-2.5-pro"
-              name="Gemini 2.5 Pro"
-              desc="Chất lượng cao nhất, tư duy sâu"
+              id="gemini-2.5-flash-nat"
+              name="Gemini 2.5 Pro (Natural)"
+              desc="Ngôn ngữ tự nhiên, tư duy sâu"
               current={model}
               onSelect={setModel}
               icon={<ShieldCheck size={18} />}
             />
             <ModelOption
-              id="gemini-2.5-flash-lite"
-              name="Gemini 2.5 Flash Lite"
-              desc="Siêu nhẹ, tiết kiệm nhất"
+              id="gemini-1.5-flash"
+              name="Gemini 1.5 Flash"
+              desc="Siêu tiết kiệm, hoạt động ổn định"
               current={model}
               onSelect={setModel}
               icon={<Activity size={18} />}

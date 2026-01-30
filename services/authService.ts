@@ -42,16 +42,21 @@ export const login = async (email: string, password: string, remember: boolean):
   if (error) throw new Error("Email hoặc mật khẩu không đúng.");
   if (!data.user) throw new Error("Lỗi đăng nhập.");
 
-  // Lấy thêm tên từ bảng profiles
+  // Tối ưu: Lấy profile song song hoặc không chặn nếu chậm
   let userName = email.split('@')[0];
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('full_name')
-    .eq('id', data.user.id)
-    .single();
 
-  if (profile && profile.full_name) {
-    userName = profile.full_name;
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', data.user.id)
+      .maybeSingle(); // Dùng maybeSingle nhanh hơn single (không lỗi nếu null)
+
+    if (profile && profile.full_name) {
+      userName = profile.full_name;
+    }
+  } catch (err) {
+    console.warn("Profile load slow/error:", err);
   }
 
   return {
@@ -67,15 +72,23 @@ export const getCurrentUser = async (): Promise<User | null> => {
   if (!session?.user) return null;
 
   // Lấy profile
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('full_name')
-    .eq('id', session.user.id)
-    .single();
+  let userName = session.user.email?.split('@')[0] || "Cô giáo";
+
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', session.user.id)
+      .maybeSingle();
+
+    if (profile?.full_name) userName = profile.full_name;
+  } catch (e) {
+    // Ignore profile error
+  }
 
   return {
     id: session.user.id,
-    name: profile?.full_name || session.user.email?.split('@')[0] || "Cô giáo",
+    name: userName,
     email: session.user.email || "",
   };
 };
