@@ -30,10 +30,10 @@ const App: React.FC = () => {
   useEffect(() => {
     const checkUser = async () => {
       try {
-        // Add timeout to prevent 10s hang on slow networks
+        // Add timeout to prevent hang on slow networks (10s for production)
         const sessionPromise = supabase.auth.getSession();
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Session check timeout')), 3000)
+          setTimeout(() => reject(new Error('Session check timeout')), 10000)
         );
 
         const { data: { session }, error: authError } = await Promise.race([
