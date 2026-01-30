@@ -24,11 +24,13 @@ const App: React.FC = () => {
   const [currentRequest, setCurrentRequest] = useState<LessonRequest | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0); // Trigger Dashboard reload
 
   // Lắng nghe trạng thái đăng nhập từ Supabase
   useEffect(() => {
     const checkUser = async () => {
       try {
+        // Use cached session first (no network call)
         const { data: { session }, error: authError } = await supabase.auth.getSession();
 
         if (authError) {
@@ -37,23 +39,40 @@ const App: React.FC = () => {
         }
 
         if (session?.user) {
-          // Lấy thêm thông tin profile nếu cần
-          const { data: profile, error: profileError } = await supabase.from('profiles').select('full_name').eq('id', session.user.id).single();
-
-          if (profileError) {
-            console.log("Profile fetch error (using fallback):", profileError);
-          }
-
+          // Set user immediately with email, fetch profile later
           setUser({
             id: session.user.id,
             email: session.user.email || '',
-            name: profile?.full_name || session.user.email?.split('@')[0] || 'Cô giáo'
+            name: session.user.email?.split('@')[0] || 'Cô giáo'
           });
+
+          // Mark auth as done immediately
+          setIsAuthChecking(false);
+
+          // Fetch profile in background (non-blocking)
+          (async () => {
+            try {
+              const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', session.user.id).single();
+              if (profile?.full_name) {
+                setUser(prev => prev ? { ...prev, name: profile.full_name } : null);
+              }
+            } catch (err) {
+              console.log("Profile fetch error (using fallback):", err);
+            }
+          })();
+        } else {
+          setIsAuthChecking(false);
         }
-      } catch (err) {
+      } catch (err: any) {
+        if (err.name === 'AbortError' || err.message?.includes('AbortError')) {
+          // Ignore benign abort errors but still turn off loading
+          setIsAuthChecking(false);
+          return;
+        }
         console.error("Unexpected error during auth check:", err);
+        setIsAuthChecking(false);
       } finally {
-        // CAUTION: Always turn off checks to avoid infinite loading
+        // Ensure we always turn off loading
         setIsAuthChecking(false);
       }
     };
@@ -118,6 +137,8 @@ const App: React.FC = () => {
       // Auto save after generation (Async)
       try {
         await savePlan(data, result);
+        // Trigger Dashboard refresh
+        setRefreshKey(prev => prev + 1);
       } catch (saveError) {
         console.error("Lỗi tự động lưu:", saveError);
         // Không block trải nghiệm nếu lưu lỗi, chỉ log
@@ -151,6 +172,7 @@ const App: React.FC = () => {
     if (currentPage === 'dashboard') {
       return (
         <Dashboard
+          key={refreshKey} // Force remount when refreshKey changes
           onViewPlan={handleViewSavedPlan}
           onCreateNew={() => {
             handleReset();

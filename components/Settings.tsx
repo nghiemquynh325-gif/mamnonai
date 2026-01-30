@@ -5,8 +5,8 @@ import { GoogleGenAI } from "@google/genai";
 export const Settings: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
-  const [model, setModel] = useState('gemini-3-flash-preview');
-  
+  const [model, setModel] = useState('gemini-2.5-flash');
+
   // Status states
   const [isSaved, setIsSaved] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
@@ -15,7 +15,7 @@ export const Settings: React.FC = () => {
   useEffect(() => {
     const savedKey = localStorage.getItem('MAMNON_AI_API_KEY');
     const savedModel = localStorage.getItem('MAMNON_AI_MODEL');
-    
+
     if (savedKey) setApiKey(savedKey);
     if (savedModel) setModel(savedModel);
   }, []);
@@ -42,8 +42,10 @@ export const Settings: React.FC = () => {
 
     try {
       const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+      // Use the latest stable model for testing
+      const testModel = 'gemini-2.5-flash';
       const response = await ai.models.generateContent({
-        model: model,
+        model: testModel,
         contents: 'Hello, confirm connection.',
       });
 
@@ -56,17 +58,25 @@ export const Settings: React.FC = () => {
     } catch (error: any) {
       console.error(error);
       setTestStatus('error');
-      setTestMessage(
-        error.message?.includes('API key') 
-          ? 'Mã khóa không đúng. Cô vui lòng kiểm tra lại.' 
-          : 'Lỗi kết nối mạng hoặc mô hình AI đang bận.'
-      );
+
+      // Better error handling
+      let errorMsg = 'Lỗi kết nối mạng hoặc mô hình AI đang bận.';
+
+      if (error.message?.includes('API key') || error.message?.includes('403')) {
+        errorMsg = 'Mã khóa không đúng. Cô vui lòng kiểm tra lại.';
+      } else if (error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('RESOURCE_EXHAUSTED')) {
+        errorMsg = 'Mã API Key này đã hết hạn mức miễn phí. Cô vui lòng tạo API Key mới hoặc đợi ngày mai để tiếp tục sử dụng.';
+      } else if (error.message?.includes('404') || error.message?.includes('NOT_FOUND')) {
+        errorMsg = 'Mô hình AI không khả dụng. Vui lòng thử lại sau.';
+      }
+
+      setTestMessage(errorMsg);
     }
   };
 
   return (
     <div className="max-w-3xl mx-auto space-y-8 animate-fade-in pb-10">
-      
+
       {/* Header */}
       <div className="text-center mb-10">
         <h2 className="text-3xl font-extrabold text-gray-800">Cài đặt hệ thống</h2>
@@ -81,7 +91,7 @@ export const Settings: React.FC = () => {
           </div>
           <h3 className="text-lg font-bold text-gray-800">1. Kết nối AI (Chìa khóa thông minh)</h3>
         </div>
-        
+
         <div className="p-6 space-y-4">
           <div>
             <label className="block text-gray-700 font-semibold mb-2 text-sm">
@@ -103,8 +113,15 @@ export const Settings: React.FC = () => {
               </button>
             </div>
             <div className="mt-3 flex items-start gap-2 text-xs text-gray-500 bg-gray-50 p-3 rounded-lg">
-                <InfoIcon className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                <span>Nếu cô chưa có mã khóa, hãy <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-blue-600 font-bold hover:underline">bấm vào đây</a> để đăng ký miễn phí từ Google.</span>
+              <InfoIcon className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <span>Nếu cô chưa có mã khóa, hãy <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-blue-600 font-bold hover:underline">bấm vào đây</a> để đăng ký miễn phí từ Google.</span>
+            </div>
+            <div className="mt-2 flex items-start gap-2 text-xs text-amber-700 bg-amber-50 p-3 rounded-lg border border-amber-200">
+              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <div>
+                <strong>Lưu ý về hạn mức:</strong> Mỗi tài khoản Google có giới hạn <strong>1,500 lượt tạo/ngày</strong>.
+                Nếu hết hạn mức, cô có thể: <strong>(1)</strong> Đợi đến sáng mai, hoặc <strong>(2)</strong> Dùng Gmail khác để tạo API Key mới.
+              </div>
             </div>
           </div>
         </div>
@@ -124,26 +141,26 @@ export const Settings: React.FC = () => {
             Cô muốn AI làm việc như thế nào?
           </label>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <ModelOption 
-              id="gemini-3-flash-preview"
-              name="Thông Minh & Nhanh"
-              desc="Khuyên dùng cho mọi loại giáo án"
+            <ModelOption
+              id="gemini-2.5-flash"
+              name="Gemini 2.5 Flash"
+              desc="Khuyên dùng (Mới nhất, nhanh nhất)"
               current={model}
               onSelect={setModel}
               icon={<Zap size={18} />}
             />
-            <ModelOption 
-              id="gemini-3-pro-preview"
-              name="Chuyên Gia Sâu Sắc"
-              desc="Viết hay hơn nhưng chậm hơn chút xíu"
+            <ModelOption
+              id="gemini-2.5-pro"
+              name="Gemini 2.5 Pro"
+              desc="Chất lượng cao nhất, tư duy sâu"
               current={model}
               onSelect={setModel}
               icon={<ShieldCheck size={18} />}
             />
-            <ModelOption 
-              id="gemini-2.5-flash"
-              name="Tiết Kiệm & Nhẹ"
-              desc="Dùng khi mạng yếu hoặc cần đơn giản"
+            <ModelOption
+              id="gemini-2.5-flash-lite"
+              name="Gemini 2.5 Flash Lite"
+              desc="Siêu nhẹ, tiết kiệm nhất"
               current={model}
               onSelect={setModel}
               icon={<Activity size={18} />}
@@ -163,7 +180,7 @@ export const Settings: React.FC = () => {
 
         <div className="p-6 flex flex-col items-center justify-center space-y-4">
           <div className="flex w-full gap-4">
-             <button
+            <button
               onClick={handleTestConnection}
               disabled={testStatus === 'testing'}
               className={`flex-1 py-3 px-4 rounded-xl font-bold text-sm border transition-all flex items-center justify-center gap-2
@@ -218,8 +235,8 @@ const ModelOption = ({ id, name, desc, current, onSelect, icon }: any) => (
   <button
     onClick={() => onSelect(id)}
     className={`p-3 rounded-xl border text-left transition-all duration-200 h-full flex flex-col
-      ${current === id 
-        ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' 
+      ${current === id
+        ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500'
         : 'bg-white border-gray-200 hover:border-blue-300 hover:bg-gray-50'
       }
     `}
@@ -237,9 +254,9 @@ const ModelOption = ({ id, name, desc, current, onSelect, icon }: any) => (
 );
 
 const InfoIcon = ({ className }: { className?: string }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-        <circle cx="12" cy="12" r="10" />
-        <line x1="12" y1="16" x2="12" y2="12" />
-        <line x1="12" y1="8" x2="12.01" y2="8" />
-    </svg>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="16" x2="12" y2="12" />
+    <line x1="12" y1="8" x2="12.01" y2="8" />
+  </svg>
 );

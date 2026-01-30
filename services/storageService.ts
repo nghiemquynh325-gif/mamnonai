@@ -5,7 +5,7 @@ import { supabase } from "./supabaseClient";
 // Lưu giáo án lên Cloud
 export const savePlan = async (request: LessonRequest, content: string): Promise<SavedLessonPlan> => {
   const { data: { user } } = await supabase.auth.getUser();
-  
+
   if (!user) {
     throw new Error("Cô cần đăng nhập để lưu giáo án.");
   }
@@ -40,23 +40,36 @@ export const savePlan = async (request: LessonRequest, content: string): Promise
 
 // Lấy danh sách giáo án từ Cloud
 export const getPlans = async (): Promise<SavedLessonPlan[]> => {
-  const { data, error } = await supabase
-    .from('lesson_plans')
-    .select('*')
-    .order('created_at', { ascending: false });
+  try {
+    const { data, error } = await supabase
+      .from('lesson_plans')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-  if (error) {
-    console.error("Lỗi tải giáo án:", error);
+    if (error) {
+      // Ignore benign AbortError from React StrictMode
+      if (error.message?.includes('AbortError') || error.code === '20') {
+        return [];
+      }
+      console.error("Lỗi tải giáo án:", error);
+      return [];
+    }
+
+    return data.map((item: any) => ({
+      id: item.id,
+      createdAt: item.created_at,
+      request: item.request_data, // JSONB tự động parse thành object
+      content: item.content,
+      title: item.title
+    }));
+  } catch (err: any) {
+    // Silently ignore AbortError
+    if (err.name === 'AbortError' || err.message?.includes('AbortError')) {
+      return [];
+    }
+    console.error("Lỗi tải giáo án:", err);
     return [];
   }
-
-  return data.map((item: any) => ({
-    id: item.id,
-    createdAt: item.created_at,
-    request: item.request_data, // JSONB tự động parse thành object
-    content: item.content,
-    title: item.title
-  }));
 };
 
 // Xóa giáo án
