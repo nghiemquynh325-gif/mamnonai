@@ -143,18 +143,17 @@ const App: React.FC = () => {
 
   const handleLogout = async () => {
     if (window.confirm("Cô có chắc muốn đăng xuất không ạ?")) {
-      try {
-        await logout();
-      } catch (err) {
-        console.warn("Logout error (network?), forcing local cleanup:", err);
-      } finally {
-        // Always clear local state
-        setUser(null);
-        setLessonPlan(null);
-        setCurrentRequest(null);
-        localStorage.removeItem('MAMNON_AI_API_KEY'); // Ensure key is gone
-        window.location.reload(); // Hard refresh to clear any stuck Supabase state
-      }
+      // Clear session from localStorage directly (bypass SDK timeout on Vercel)
+      localStorage.removeItem('sb-savcmyugqmwviplclvec-auth-token');
+      localStorage.removeItem('MAMNON_AI_API_KEY');
+
+      // Clear local state
+      setUser(null);
+      setLessonPlan(null);
+      setCurrentRequest(null);
+
+      // Hard refresh to reset app
+      window.location.reload();
     }
   };
 
