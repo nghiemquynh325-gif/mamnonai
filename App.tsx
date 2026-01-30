@@ -30,28 +30,33 @@ const App: React.FC = () => {
   useEffect(() => {
     const checkUser = async () => {
       try {
-        // Add timeout to prevent hang on slow networks (10s for production)
-        const sessionPromise = supabase.auth.getSession();
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Session check timeout')), 10000)
-        );
+        // Read session directly from localStorage to bypass SDK timeout on Vercel
+        const sessionData = localStorage.getItem('sb-savcmyugqmwviplclvec-auth-token');
 
-        const { data: { session }, error: authError } = await Promise.race([
-          sessionPromise,
-          timeoutPromise
-        ]) as any;
-
-        if (authError) {
-          console.error("Auth session error:", authError);
-          // If auth fails, we just proceed as logged out
+        if (!sessionData) {
+          setIsAuthChecking(false);
+          return;
         }
 
-        if (session?.user) {
+        let session;
+        try {
+          session = JSON.parse(sessionData);
+        } catch {
+          console.warn("Invalid session data, clearing...");
+          localStorage.removeItem('sb-savcmyugqmwviplclvec-auth-token');
+          setIsAuthChecking(false);
+          return;
+        }
+
+        const user = session?.user;
+        const accessToken = session?.access_token;
+
+        if (user && accessToken) {
           // Set user immediately with email, fetch profile later
           setUser({
-            id: session.user.id,
-            email: session.user.email || '',
-            name: session.user.email?.split('@')[0] || 'Cô giáo'
+            id: user.id,
+            email: user.email || '',
+            name: user.email?.split('@')[0] || 'Cô giáo'
           });
 
           // Mark auth as done immediately
@@ -63,11 +68,11 @@ const App: React.FC = () => {
               const profilePromise = supabase
                 .from('profiles')
                 .select('full_name')
-                .eq('id', session.user.id)
+                .eq('id', user.id)
                 .single();
 
               // Pass userId to skip redundant auth check in getApiKey
-              const apiKeyPromise = getApiKey(session.user.id);
+              const apiKeyPromise = getApiKey(user.id);
 
               const [profileResponse, apiKey] = await Promise.all([profilePromise, apiKeyPromise]);
               const { data: profile } = profileResponse;
